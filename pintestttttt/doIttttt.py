@@ -19,7 +19,7 @@ master = mavutil.mavlink_connection(VIANS_DATALINK_MODULE, dialect = "ardupilotm
 timeBootMs = 0
 throttle = 1100 #using channel 5
 throttleMotor = 1100
-k = 20
+k = 10
 voltage = 0
 voltageMin = 0
 current = 0
@@ -27,7 +27,7 @@ FILE_OPENED = 0
 PIN_MAX_POWER = 10000
 PIN_MIN_POWER = 0
 #check this
-smith = 3
+smith = 10
 powerSet = 0
 powerSens = 0
 powerRaw = np.zeros(2*k+1)
@@ -178,7 +178,7 @@ class outRC(threading.Thread):
 				throttleMotor=1100
 			sendRC(throttleMotor)
 			if FILE_OPENED:
-				filee.write(str(timeBootMs) + ',' + str(voltage)+ ',' + str(current)+ ',' + str(throttleMotor)+ ',' + str(powerConv) + '\n')
+				filee.write(str(timeBootMs) + ',' + str(voltage)+ ',' + str(current)+ ',' + str(throttleMotor)+ ',' + str(powerSens) + '\n')
 _threadInput = threadInput(1, 'input')
 _threadInput.start()
 _outRC = outRC(2,'outrc')
