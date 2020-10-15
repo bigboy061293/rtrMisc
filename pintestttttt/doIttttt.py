@@ -1,11 +1,6 @@
 #python.exe D:\jobs\rtrRf\sources\rtrMisc\pintestttttt\doIttttt.py
 #file saved at: D:\jobs\rtrRf\sources\rtrMisc\pintestttttt\output
 #Sua duong dan file save at
-
-file_save_at = 'D:\\jobs\\rtrRf\\sources\\rtrMisc\\pintestttttt\\output\\'
-
-
-
 import os
 import subprocess, signal
 import threading
@@ -17,10 +12,11 @@ import win32pdh, string, win32api
 os.getcwd()
 
 from pymavlink.dialects.v20 import ardupilotmega as mavlink
+file_save_at = 'D:\\jobs\\rtrRf\\sources\\rtrMisc\\pintestttttt\\output\\'
 VIANS_DATALINK_MODULE = 'tcp:192.168.0.210:20002'
 master = mavutil.mavlink_connection(VIANS_DATALINK_MODULE, dialect = "ardupilotmega", source_system=255, source_component=29)
 
-
+timeBootMs = 0
 throttle = 1100 #using channel 5
 throttleMotor = 1100
 k = 20
@@ -28,7 +24,7 @@ voltage = 0
 voltageMin = 0
 current = 0
 FILE_OPENED = 0
-PIN_MAX_POWER = 20400
+PIN_MAX_POWER = 10000
 PIN_MIN_POWER = 0
 #check this
 smith = 3
@@ -36,17 +32,33 @@ powerSet = 0
 powerSens = 0
 powerRaw = np.zeros(2*k+1)
 powerConv = 0
-FILE_OPENED = 0
+FILE_OPENED = 1
 returnF = False
 print "USING CHANNEL 1 2 3 4"
 if FILE_OPENED:
+
 	print "File name please: "
 	filename = raw_input()
-	filename =  os.path.join(file_save_at, filename + str(datetime.now()) + '.txt')
+	now = datetime.now()
+	filename =  os.path.join(file_save_at, filename +'_' + now.strftime("%m%d%H%M%S") + '.txt')
 	#filename = file_save_at + filename + '.txt'
-	print filename
+	print 'okbd, filename = ', filename
 	filee = open(filename, 'w')
+	
+print "Min voltage please: "
+try:
+	voltageMin = int(raw_input())
+	print 'okbd, voltageMin = ', voltageMin
+except:
+	print 'Ngu, thoat lam lai'
 
+print "Set power please: "
+try:
+	powerSet = int(raw_input())
+	print 'okbd, set power = ', powerSet
+except:
+	print 'Ngu, thoat lam lai'
+	
 def connectToSim(master):
     msg = None
     while not msg:
@@ -66,28 +78,6 @@ master.mav.command_long_send(
     147, 100, 0, 0, 0, 0, 0)
  
 UINT16_MAX = 65535
-def procids():
-    #each instance is a process, you can have multiple processes w/same name
-    junk, instances = win32pdh.EnumObjectItems(None,None,'process', win32pdh.PERF_DETAIL_WIZARD)
-    proc_ids=[]
-    proc_dict={}
-    for instance in instances:
-        if instance in proc_dict:
-            proc_dict[instance] = proc_dict[instance] + 1
-        else:
-            proc_dict[instance]=0
-    for instance, max_instances in proc_dict.items():
-        for inum in xrange(max_instances+1):
-            hq = win32pdh.OpenQuery() # initializes the query handle 
-            path = win32pdh.MakeCounterPath( (None,'process',instance, None, inum,'ID Process') )
-            counter_handle=win32pdh.AddCounter(hq, path) 
-            win32pdh.CollectQueryData(hq) #collects data for the counter 
-            type, val = win32pdh.GetFormattedCounterValue(counter_handle, win32pdh.PDH_FMT_LONG)
-            proc_ids.append((instance,str(val)))
-            win32pdh.CloseQuery(hq) 
-
-    proc_ids.sort()
-    return proc_ids
 
 def sendRC(throttleMotor):
 	mss = mavlink.MAVLink_rc_channels_override_message(
@@ -137,10 +127,19 @@ class threadInput(threading.Thread):
 			elif inAbc[0] == 'p':
 				try:
 					powerSet = int(inAbc[1])
+					print 'Okbd, power = ',powerSet
 				except:
 					powerSet = 0
 					throttleMotor = 1100
-				pass
+					
+				continue
+			elif abc == 'h':
+				print ('Set Power: ', powerSet, 
+						'voltage: ', voltage,
+						'current: ', current,
+						'Power: ', powerConv,
+						'PWM: ', throttleMotor)
+				continue
 			elif abc == 's':
 				throttleMotor = 1100
 				
@@ -165,7 +164,7 @@ class outRC(threading.Thread):
 
 				powerConv = np.average(powerRaw)
 
-				print 'Set Power: ', powerSet, ', ', ' Current Power: ', powerConv,', ', 'Current PWM: ', throttleMotor
+				
 				if powerConv < (powerSet - smith):
 					throttleMotor+=5
 				#output 
@@ -177,7 +176,9 @@ class outRC(threading.Thread):
 					throttleMotor = 1940
 			else: 
 				throttleMotor=1100
-			sendRC(throttleMotor)	
+			sendRC(throttleMotor)
+			if FILE_OPENED:
+				filee.write(str(timeBootMs) + ',' + str(voltage)+ ',' + str(current)+ ',' + str(throttleMotor)+ ',' + str(powerConv) + '\n')
 _threadInput = threadInput(1, 'input')
 _threadInput.start()
 _outRC = outRC(2,'outrc')
@@ -185,19 +186,17 @@ _outRC.start()
 
 while True and not returnF:
 	
-	time.sleep(0.1)
+	time.sleep(0.001)
 	msg = master.recv_match()
 	if not msg:
 		continue
 	
-	
+	#print msg
 	if msg.get_type() == 'BATTERY_STATUS':
 		voltage = float(msg.voltages[0])/1000
 		current = float(msg.current_battery)/100
 		powerSens = int(voltage * current)
 		#print powerSens
 	elif msg.get_type() == 'RC_CHANNELS':
-		#throttle = msg.chan5_raw
+		timeBootMs = msg.time_boot_ms
 		pass
-	
-	
