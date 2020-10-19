@@ -11,7 +11,7 @@ import numpy as np
 import win32pdh, string, win32api
 os.getcwd()
 
-from pymavlink.dialects.v20 import ardupilotmega as mavlink
+from pymavlink.dialects.v20 import ardupilotmega as mavlink2
 file_save_at = 'D:\\jobs\\rtrRf\\sources\\rtrMisc\\pintestttttt\\output\\'
 VIANS_DATALINK_MODULE = 'tcp:192.168.0.210:20002'
 master = mavutil.mavlink_connection(VIANS_DATALINK_MODULE, dialect = "ardupilotmega", source_system=255, source_component=29)
@@ -19,7 +19,9 @@ master = mavutil.mavlink_connection(VIANS_DATALINK_MODULE, dialect = "ardupilotm
 timeBootMs = 0
 throttle = 1100 #using channel 5
 throttleMotor = 1100
+throttleMotorStep = 5
 k = 10
+energyConsumption = 0
 voltage = 0
 voltageMin = 0
 current = 0
@@ -27,7 +29,7 @@ FILE_OPENED = 0
 PIN_MAX_POWER = 10000
 PIN_MIN_POWER = 0
 #check this
-smith = 10
+smith = 30
 powerSet = 0
 powerSens = 0
 powerRaw = np.zeros(2*k+1)
@@ -80,17 +82,25 @@ master.mav.command_long_send(
 UINT16_MAX = 65535
 
 def sendRC(throttleMotor):
-	mss = mavlink.MAVLink_rc_channels_override_message(
+	mss = mavlink2.MAVLink_rc_channels_override_message(
                     master.target_system,
                     master.target_component,
                     throttleMotor,
-					throttleMotor,
-					throttleMotor,
+					UINT16_MAX,
+					UINT16_MAX,
+					UINT16_MAX,
+					UINT16_MAX,
+					UINT16_MAX,
+					UINT16_MAX,
+					UINT16_MAX,
 					throttleMotor,
 					UINT16_MAX,
 					UINT16_MAX,
 					UINT16_MAX,
-					UINT16_MAX
+					UINT16_MAX,
+					UINT16_MAX,
+					UINT16_MAX,
+					UINT16_MAX	
                     )
             # sending terrain end  ....................
 	master.mav.send(mss)
@@ -137,7 +147,8 @@ class threadInput(threading.Thread):
 				print ('Set Power: ', powerSet, 
 						'voltage: ', voltage,
 						'current: ', current,
-						'Power: ', powerConv,
+						'energy: ', energyConsumption,
+						'Power: ', round(powerConv,2),
 						'PWM: ', throttleMotor)
 				continue
 			elif abc == 's':
@@ -156,7 +167,7 @@ class outRC(threading.Thread):
 		global powerRaw
 		
 		while True and not returnF:
-			time.sleep(0.01)
+			time.sleep(0.05)
 			
 			if voltage >= voltageMin:
 				powerRaw = np.roll(powerRaw,-1) # rolling in the deep
@@ -166,10 +177,10 @@ class outRC(threading.Thread):
 
 				
 				if powerConv < (powerSet - smith):
-					throttleMotor+=5
+					throttleMotor+=throttleMotorStep
 				#output 
 				elif powerConv > (powerSet + smith):
-					throttleMotor-=5
+					throttleMotor-=throttleMotorStep
 				if throttleMotor < 1100:
 					throttleMotor = 1100
 				elif throttleMotor >1940:
@@ -178,7 +189,7 @@ class outRC(threading.Thread):
 				throttleMotor=1100
 			sendRC(throttleMotor)
 			if FILE_OPENED:
-				filee.write(str(timeBootMs) + ',' + str(voltage)+ ',' + str(current)+ ',' + str(throttleMotor)+ ',' + str(powerSens) + '\n')
+				filee.write(str(datetime.now()) +',' +str(timeBootMs) + ',' + str(voltage)+ ',' + str(current)+ ',' + str(energyConsumption) + ',' + str(throttleMotor)+ ',' + str(powerSens) + '\n')
 _threadInput = threadInput(1, 'input')
 _threadInput.start()
 _outRC = outRC(2,'outrc')
@@ -195,6 +206,7 @@ while True and not returnF:
 	if msg.get_type() == 'BATTERY_STATUS':
 		voltage = float(msg.voltages[0])/1000
 		current = float(msg.current_battery)/100
+		energyConsumption = msg.energy_consumed
 		powerSens = int(voltage * current)
 		#print powerSens
 	elif msg.get_type() == 'RC_CHANNELS':
